@@ -2,6 +2,7 @@ package errors
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -34,7 +35,7 @@ func TestAs(t *testing.T) {
 	var errStrIn errorString = "TestForFun"
 
 	var errStrOut errorString
-	if As(errStrIn, &errStrOut) {
+	if errors.As(errStrIn, &errStrOut) {
 		if errStrOut != "TestForFun" {
 			t.Errorf("direct errStr value is not returned")
 		}
@@ -44,7 +45,7 @@ func TestAs(t *testing.T) {
 
 	errStrOut = ""
 	err := Wrap(errStrIn, 0)
-	if As(err, &errStrOut) {
+	if errors.As(err, &errStrOut) {
 		if errStrOut != "TestForFun" {
 			t.Errorf("wrapped errStr value is not returned")
 		}
@@ -133,36 +134,36 @@ func TestNew(t *testing.T) {
 
 // This test should work for any go version
 func TestIs(t *testing.T) {
-	if Is(nil, io.EOF) {
+	if errors.Is(nil, io.EOF) {
 		t.Errorf("nil is an error")
 	}
 
-	if !Is(io.EOF, io.EOF) {
+	if !errors.Is(io.EOF, io.EOF) {
 		t.Errorf("io.EOF is not io.EOF")
 	}
 
-	if Is(io.EOF, New(io.EOF)) {
+	if errors.Is(io.EOF, New(io.EOF)) {
 		t.Errorf("New(io.EOF) is not io.EOF")
 	}
 
-	if !Is(New(io.EOF), io.EOF) {
+	if !errors.Is(New(io.EOF), io.EOF) {
 		t.Errorf("io.EOF is not New(io.EOF)")
 	}
 
 	// a stackful error is not an identical stackful error except when they are
 	// the same object.  This is the same behavior as general errors.
-	if Is(New(io.EOF), New(io.EOF)) {
+	if errors.Is(New(io.EOF), New(io.EOF)) {
 		t.Errorf("New(io.EOF) is not New(io.EOF)")
 	}
 	err := New(io.EOF)
-	if !Is(err, err) {
+	if !errors.Is(err, err) {
 		t.Errorf("New(io.EOF) is itself")
 	}
-	if Is(fmt.Errorf("err"), fmt.Errorf("err")) {
+	if errors.Is(fmt.Errorf("err"), fmt.Errorf("err")) {
 		t.Errorf("Errorf err is different Errorf err")
 	}
 
-	if Is(io.EOF, fmt.Errorf("io.EOF")) {
+	if errors.Is(io.EOF, fmt.Errorf("io.EOF")) {
 		t.Errorf("io.EOF is fmt.Errorf")
 	}
 }
@@ -247,7 +248,7 @@ func ExampleWrapError_skip() {
 
 func ExampleIs(reader io.Reader, buff []byte) {
 	_, err := reader.Read(buff)
-	if Is(err, io.EOF) {
+	if errors.Is(err, io.EOF) {
 		return
 	}
 }
@@ -372,35 +373,35 @@ func TestIs2(t *testing.T) {
 
 	shouldNotMatch := errorWithCustomIs{Key: "notOk"}
 
-	if !Is(custErr, shouldMatch) {
+	if !errors.Is(custErr, shouldMatch) {
 		t.Errorf("custErr is not a TestForFun customError")
 	}
 
-	if Is(custErr, shouldNotMatch) {
+	if errors.Is(custErr, shouldNotMatch) {
 		t.Errorf("custErr is a notOk customError")
 	}
 
-	if Is(custErr, New(shouldMatch)) {
+	if errors.Is(custErr, New(shouldMatch)) {
 		t.Errorf("custErr is a New(TestForFun customError)")
 	}
 
-	if Is(custErr, New(shouldNotMatch)) {
+	if errors.Is(custErr, New(shouldNotMatch)) {
 		t.Errorf("custErr is a New(notOk customError)")
 	}
 
-	if !Is(New(custErr), shouldMatch) {
+	if !errors.Is(New(custErr), shouldMatch) {
 		t.Errorf("New(custErr) is not a TestForFun customError")
 	}
 
-	if Is(New(custErr), shouldNotMatch) {
+	if errors.Is(New(custErr), shouldNotMatch) {
 		t.Errorf("New(custErr) is a notOk customError")
 	}
 
-	if Is(New(custErr), New(shouldMatch)) {
+	if errors.Is(New(custErr), New(shouldMatch)) {
 		t.Errorf("New(custErr) is not a New(TestForFun customError)")
 	}
 
-	if Is(New(custErr), New(shouldNotMatch)) {
+	if errors.Is(New(custErr), New(shouldNotMatch)) {
 		t.Errorf("New(custErr) is a New(notOk customError)")
 	}
 }
@@ -423,7 +424,7 @@ func (ewci errorWithCustomIs) Is(target error) bool {
 // "untyped nil" so that they are in turn filtered.
 func TestNil(t *testing.T) {
 	var err error
-	err2 := Join(Wrap(err, 0), WrapPrefix(err, "prefix: ", 0))
+	err2 := errors.Join(Wrap(err, 0), WrapPrefix(err, "prefix: ", 0))
 	if err2 != nil {
 		t.Errorf("Joined, Wrapped, WrapPrefix'ed nil errors not nil: %v", err2)
 	}
