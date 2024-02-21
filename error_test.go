@@ -21,7 +21,7 @@ func BenchmarkStackFormat(b *testing.B) {
 					b.Fatal(err)
 				}
 
-				e := Errorf("hi")
+				e := Errorf("hi").(*Error)
 				_ = string(e.Stack())
 			}()
 
@@ -61,7 +61,7 @@ func TestStackFormat(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		e, expected := Errorf("hi"), callers()
+		e, expected := Errorf("hi").(*Error), callers()
 
 		bs := [][]uintptr{e.stack, expected}
 
@@ -93,7 +93,7 @@ func TestSkipWorks(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		bs := [][]uintptr{Wrap("hi", 2).stack, callersSkip(2)}
+		bs := [][]uintptr{Wrap("hi", 2).(*Error).stack, callersSkip(2)}
 
 		if err := compareStacks(bs[0], bs[1]); err != nil {
 			t.Errorf("Stack didn't match")
@@ -106,19 +106,20 @@ func TestSkipWorks(t *testing.T) {
 
 func TestNew(t *testing.T) {
 
-	err := New("foo")
+	var err *Error
+	err = New("foo").(*Error)
 
 	if err.Error() != "foo" {
 		t.Errorf("Wrong message")
 	}
 
-	err = New(fmt.Errorf("foo"))
+	err = New(fmt.Errorf("foo")).(*Error)
 
 	if err.Error() != "foo" {
 		t.Errorf("Wrong message")
 	}
 
-	bs := [][]uintptr{New("foo").stack, callers()}
+	bs := [][]uintptr{New("foo").(*Error).stack, callers()}
 
 	if err := compareStacks(bs[0], bs[1]); err != nil {
 		t.Errorf("Stack didn't match")
@@ -140,12 +141,25 @@ func TestIs(t *testing.T) {
 		t.Errorf("io.EOF is not io.EOF")
 	}
 
-	if !Is(io.EOF, New(io.EOF)) {
+	if Is(io.EOF, New(io.EOF)) {
+		t.Errorf("New(io.EOF) is not io.EOF")
+	}
+
+	if !Is(New(io.EOF), io.EOF) {
 		t.Errorf("io.EOF is not New(io.EOF)")
 	}
 
-	if !Is(New(io.EOF), New(io.EOF)) {
+	// a stackful error is not an identical stackful error except when they are
+	// the same object.  This is the same behavior as general errors.
+	if Is(New(io.EOF), New(io.EOF)) {
 		t.Errorf("New(io.EOF) is not New(io.EOF)")
+	}
+	err := New(io.EOF)
+	if !Is(err, err) {
+		t.Errorf("New(io.EOF) is itself")
+	}
+	if Is(fmt.Errorf("err"), fmt.Errorf("err")) {
+		t.Errorf("Errorf err is different Errorf err")
 	}
 
 	if Is(io.EOF, fmt.Errorf("io.EOF")) {
@@ -190,7 +204,7 @@ func TestWrapPrefixError(t *testing.T) {
 		t.Errorf("Constructor with an error failed")
 	}
 
-	prefixed := WrapPrefix(e, "prefix", 0)
+	prefixed := WrapPrefix(e, "prefix", 0).(*Error)
 	original := e.(*Error)
 
 	if prefixed.Err != original.Err || !reflect.DeepEqual(prefixed.stack, original.stack) || !reflect.DeepEqual(prefixed.frames, original.frames) || prefixed.Error() != "prefix: prefix: hi" {
@@ -344,4 +358,73 @@ type errorString string
 
 func (e errorString) Error() string {
 	return string(e)
+}
+
+func TestIs2(t *testing.T) {
+	custErr := errorWithCustomIs{
+		Key: "TestForFun",
+		Err: io.EOF,
+	}
+
+	shouldMatch := errorWithCustomIs{
+		Key: "TestForFun",
+	}
+
+	shouldNotMatch := errorWithCustomIs{Key: "notOk"}
+
+	if !Is(custErr, shouldMatch) {
+		t.Errorf("custErr is not a TestForFun customError")
+	}
+
+	if Is(custErr, shouldNotMatch) {
+		t.Errorf("custErr is a notOk customError")
+	}
+
+	if Is(custErr, New(shouldMatch)) {
+		t.Errorf("custErr is a New(TestForFun customError)")
+	}
+
+	if Is(custErr, New(shouldNotMatch)) {
+		t.Errorf("custErr is a New(notOk customError)")
+	}
+
+	if !Is(New(custErr), shouldMatch) {
+		t.Errorf("New(custErr) is not a TestForFun customError")
+	}
+
+	if Is(New(custErr), shouldNotMatch) {
+		t.Errorf("New(custErr) is a notOk customError")
+	}
+
+	if Is(New(custErr), New(shouldMatch)) {
+		t.Errorf("New(custErr) is not a New(TestForFun customError)")
+	}
+
+	if Is(New(custErr), New(shouldNotMatch)) {
+		t.Errorf("New(custErr) is a New(notOk customError)")
+	}
+}
+
+type errorWithCustomIs struct {
+	Key string
+	Err error
+}
+
+func (ewci errorWithCustomIs) Error() string {
+	return "[" + ewci.Key + "]: " + ewci.Err.Error()
+}
+
+func (ewci errorWithCustomIs) Is(target error) bool {
+	matched, ok := target.(errorWithCustomIs)
+	return ok && matched.Key == ewci.Key
+}
+
+// Functions should properly filter nil values.  Functions should return
+// "untyped nil" so that they are in turn filtered.
+func TestNil(t *testing.T) {
+	var err error
+	err2 := Join(Wrap(err, 0), WrapPrefix(err, "prefix: ", 0))
+	if err2 != nil {
+		t.Errorf("Joined, Wrapped, WrapPrefix'ed nil errors not nil: %v", err2)
+	}
 }

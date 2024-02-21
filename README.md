@@ -1,3 +1,18 @@
+This is a fork of go-errors/errors for my personal use and where I want to
+consider breaking changes for V2
+
+Breaking changes:
+- Functions return `error` instead of `*Error`.  This allows callers to use `nil` as expected.  See https://go.dev/doc/faq#nil_error
+- Requires Go 1.20.  No attempt made for backwards compatibility.  The purpose is to match go-errors to standard Go error patterns.
+- `(*Error) Is` no longer inspects the contained error.  Go's doc for `Is` specifically says "An Is method should only shallowly compare err and the target and not call Unwrap on either.".  The previous implementation was inconsistent with `As` -- an error could be `Is` another error, but would not then provide an error using `As`.  It in-essense unwrapped an error by accessing `(*Error).Err`, which is exactly what `Unwrap()` does.  This is also much simpler.
+
+TODO:
+- reconcile how stacks should be exposed to the caller (method names).  See https://github.com/golang/go/issues/60873 and https://github.com/golang/go/issues/63358 for a Go discussion.
+- figure out use cases and helper methods for `Is` and `As`. I expect users want to do things like "give me the stack-containing `*Error` whose immediate child `Is` some type of error", which is what the previous implementation of `Is` provided in a way.  I just think this should have a different function so as to not confuse the expected golang `errors.Is` semantics.
+- simplify the tests.  Consider testify for requires/assertions. Table-based tests where appropriate.
+- reconsider whether this is a "drop in replacement for Go's errors".  With the above `Is` change this merely passes through calls to `Is`, `As`, `Join`, and `Unwrap`.  It has different semantics for `New` (accepts interface{} vs string).  `Wrap` and `WrapPrefix` are new functions with no equivalent in `errors`.  `Errorf` is equivalent to `fmt.Errorf` but that's not in the `errors` package.  I think it makes more sense to say this is a module "to supplement Go's existing `errors` module, additionally replacing some functions."
+
+
 go-errors/errors
 ================
 
